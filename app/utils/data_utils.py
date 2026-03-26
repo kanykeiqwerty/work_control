@@ -64,7 +64,7 @@
 # print(target)
 
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 
 def get_target_date():
@@ -105,3 +105,4 @@ def format_report_date(date):
 
 target=get_target_date()
 print(format_report_date(target))
+print(format_sheet_date(target))
