@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyd
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv/
+
+# Environment variables
+.env
+
+# Byte-compiled / optimized / DLL files
+*.so
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Editor settings
+.vscode/
+.idea/
