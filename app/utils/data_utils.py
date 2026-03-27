@@ -103,6 +103,6 @@ def format_report_date(date):
     return f"{date.strftime('%d.%m.%Y')} ({weekday})"
 
 
-target=get_target_date()
-print(format_report_date(target))
-print(format_sheet_date(target))
+# target=get_target_date()
+# print(format_report_date(target))
+# print(format_sheet_date(target))

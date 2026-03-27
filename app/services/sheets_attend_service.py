@@ -104,9 +104,9 @@ def get_attendance_for_employee(
     return record
 
 
-a=load_attendance(TIME_SHEET_ID, date(2026, 3, 23))
-for i in a.values():
-    print(i)
+# a=load_attendance(TIME_SHEET_ID, date(2026, 3, 23))
+# for i in a.values():
+#     print(i)
 
-b= get_attendance_for_employee(a, "Ашыракманова Каныкей")
-print(b)
+# b= get_attendance_for_employee(a, "Ашыракманова Каныкей")
+# print(b)

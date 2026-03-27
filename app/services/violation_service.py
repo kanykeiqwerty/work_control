@@ -77,11 +77,11 @@ def check_violations(
     return violations
 
 
-violations = check_violations(
-    employee="Ivan Ivanov",
-    plan_start=time(9, 0),
-    plan_end=time(18, 0),
-    fact_start=time(9, 30),
-    fact_end=time(17, 0),
-)
-print(violations)
+# violations = check_violations(
+#     employee="Ivan Ivanov",
+#     plan_start=time(9, 0),
+#     plan_end=time(18, 0),
+#     fact_start=time(9, 30),
+#     fact_end=time(17, 0),
+# )
+# print(violations)

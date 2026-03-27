@@ -19,12 +19,13 @@
 from __future__ import annotations
 
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 
-from typing import List, Optional
+
 import logging
 from app.utils.ics_utils import EventType, WorkEvent, _classify, _occurs_on, _parse_vevent_blocks
 from .calendar_service import load_ics
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,25 +59,25 @@ def get_work_events(source: str, target: date) -> list[WorkEvent]:
     results.sort(key=lambda e: e.start)
     return results
 
-def describe_day(events: List[WorkEvent]) -> str:
-    """
-    Возвращает текстовое описание дня (офлайн/онлайн события)
-    """
-    if not events:
-        return "нет рабочих событий (выходной / отпуск)"
+# def describe_day(events: List[WorkEvent]) -> str:
+#     """
+#     Возвращает текстовое описание дня (офлайн/онлайн события)
+#     """
+#     if not events:
+#         return "нет рабочих событий (выходной / отпуск)"
 
-    offline = [e for e in events if e.event_type == EventType.OFFLINE]
-    online  = [e for e in events if e.event_type == EventType.ONLINE]
+#     offline = [e for e in events if e.event_type == EventType.OFFLINE]
+#     online  = [e for e in events if e.event_type == EventType.ONLINE]
 
-    if not offline:
-        return f"онлайн-день ({len(online)} событий) — пропускаем"
+#     if not offline:
+#         return f"онлайн-день ({len(online)} событий) — пропускаем"
 
-    arrival   = offline[0].start
-    departure = offline[-1].end
-    parts = [f"офлайн {len(offline)} блок(а): приход {arrival.strftime('%H:%M')}, уход {departure.strftime('%H:%M')}"]
-    if online:
-        parts.append(f"+ онлайн {len(online)} блок(а)")
-    return ", ".join(parts)
+#     arrival   = offline[0].start
+#     departure = offline[-1].end
+#     parts = [f"офлайн {len(offline)} блок(а): приход {arrival.strftime('%H:%M')}, уход {departure.strftime('%H:%M')}"]
+#     if online:
+#         parts.append(f"+ онлайн {len(online)} блок(а)")
+#     return ", ".join(parts)
 
 # def describe_day(events: list[WorkEvent]) -> str:
     
