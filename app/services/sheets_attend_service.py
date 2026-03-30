@@ -45,10 +45,8 @@ def load_attendance(
             break
  
     if date_col is None:
-        raise ValueError(
-            f"Дата {date_str} не найдена в строке 1 таблицы приход/уход. "
-            f"Доступные даты: {[c for c in row1 if re.match(r'\d{2}\.\d{2}\.\d{4}', c.strip())]}"
-        )
+        logger.warning(f"Дата {date_str} не найдена")
+        return {}
  
     
     col_arrival = col_departure = None

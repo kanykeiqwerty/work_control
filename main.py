@@ -105,7 +105,7 @@ def main():
     violations_by_employee = {}
     
     target: date = get_target_date()
-    # target=date(2026, 3, 25)
+    # target=date(2026, 3, 28)
     # print(f"\n{'='*60}")
     # print(f"  Отчёт за {format_report_date(target)}")
     # print(f"{'='*60}\n")
@@ -117,22 +117,32 @@ def main():
     #  Загружаем все записи прихода/ухода за дату одним запросом
     try:
         attendance_map = load_attendance(TIME_SHEET_ID, target)
-    except ValueError as exc:
+    except Exception as exc:
         logger.error("Не удалось загрузить таблицу посещаемости: %s", exc)
         attendance_map = {}
 
+
+    if not attendance_map:
+        msg = (
+        f"Отчет за {format_report_date(target)} не сформирован\n"
+        f"Причина: таблица посещаемости не заполнена"
+    )
+        logger.warning(msg)
+        # send_message(msg)
+        return
+
     # Заголовок таблицы вывода
-#     col = "{:<35} {:>10} {:>10} {:>12} {:>12} {:>30}"
-#     header = col.format(
-#     "ФИО",
-#     "Пл.приход",
-#     "Пл.уход",
-#     "Факт.приход",
-#     "Факт.уход",
-#     "Нарушение"
-# )
-#     print(header)
-#     print("-" * len(header))
+    col = "{:<35} {:>10} {:>10} {:>12} {:>12} {:>30}"
+    header = col.format(
+    "ФИО",
+    "Пл.приход",
+    "Пл.уход",
+    "Факт.приход",
+    "Факт.уход",
+    "Нарушение"
+)
+    print(header)
+    print("-" * len(header))
 
     #  Перебираем сотрудников
     for emp in employees:
@@ -165,20 +175,20 @@ def main():
         violations_by_employee[emp.full_name] = violations
         viol_str = _format_violations(violations)
 
-        # print(col.format(
-        #     emp.full_name[:34],
-        #     _fmt(planned_arrival),
-        #     _fmt(planned_departure),
-        #     _fmt(actual_arrival),
-        #     _fmt(actual_departure),
-        #     viol_str
-        # ))
+        print(col.format(
+            emp.full_name[:34],
+            _fmt(planned_arrival),
+            _fmt(planned_departure),
+            _fmt(actual_arrival),
+            _fmt(actual_departure),
+            viol_str
+        ))
     message = build_telegram_report(target, violations_by_employee)
-    # send_message(message)
+    send_message(message)
 
     # сохранение в архив таблицу
-    all_violations = [v for vlist in violations_by_employee.values() for v in vlist]
-    save_violations(all_violations, target)
+    # all_violations = [v for vlist in violations_by_employee.values() for v in vlist]
+    # save_violations(all_violations, target)
 
     print()
 
@@ -200,20 +210,20 @@ def run_scheduler():
  
     scheduler.start()
 
-# if __name__ == "__main__":
-#     main()
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="WorkTimeControl")
-    parser.add_argument(
-        "--now",
-        action="store_true",
-        help="Запустить задачу немедленно (тест) и выйти",
-    )
-    args = parser.parse_args()
+    main()
+
+# if __name__ == "__main__":
+#     parser = argparse.ArgumentParser(description="WorkTimeControl")
+#     parser.add_argument(
+#         "--now",
+#         action="store_true",
+#         help="Запустить задачу немедленно (тест) и выйти",
+#     )
+#     args = parser.parse_args()
  
-    if args.now:
-        main()
-    else:
-        run_scheduler()
+#     if args.now:
+#         main()
+#     else:
+#         run_scheduler()
  

@@ -13,7 +13,8 @@ env/
 
 # Environment variables
 .env
-
+credentials.json
+app/config/settings.py
 # Byte-compiled / optimized / DLL files
 *.so
 

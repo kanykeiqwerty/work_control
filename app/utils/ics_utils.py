@@ -19,7 +19,11 @@ class EventType(Enum):
 
 SUMMARY_RULES: list[tuple[str, EventType]] = [
     ("работа (оффлайн)", EventType.OFFLINE),
+    ("работа 6 (оффлайн)", EventType.OFFLINE),
+    ("работа (офлайн)", EventType.OFFLINE),
+    ("работа оффлайн", EventType.OFFLINE),
     ("работа (онлайн)",  EventType.ONLINE),
+    ("работа онлайн",  EventType.ONLINE),
 ]
 
 
@@ -52,6 +56,20 @@ def _parse_dt(value: str, tzid: Optional[str]) -> datetime:
 
     return dt
 
+def _normalize(text: str) -> str:
+    text = text.lower()
+
+    # убрать лишние пробелы
+    text = re.sub(r"\s+", " ", text)
+
+    # убрать пробелы вокруг скобок
+    text = re.sub(r"\s*\(\s*", "(", text)
+    text = re.sub(r"\s*\)\s*", ")", text)
+
+    # унифицировать оффлайн/офлайн
+    text = text.replace("оффлайн", "офлайн")
+
+    return text.strip()
 
 def _parse_vevent_blocks(text: str) -> list[dict[str, str]]:
     # Раскрываем line folding
@@ -83,12 +101,15 @@ def _get_tzid(raw_key: str) -> Optional[str]:
 
 
 def _classify(summary: str) -> EventType:
-    lower = summary.lower()
-    for keyword, etype in SUMMARY_RULES:
-        if keyword in lower:
-            return etype
-    return EventType.IGNORE
+    s = _normalize(summary)
 
+    if "работа" in s and ("офлайн" in s or "оффлайн" in s):
+        return EventType.OFFLINE
+
+    if "работа" in s and "онлайн" in s:
+        return EventType.ONLINE
+
+    return EventType.IGNORE
 
 def _parse_rrule(rrule_str: str) -> dict[str, str]:
     result = {}
