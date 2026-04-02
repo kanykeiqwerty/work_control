@@ -105,7 +105,7 @@ def main():
     violations_by_employee = {}
     
     target: date = get_target_date()
-    # target=date(2026, 3, 28)
+    # target=date(2026, 3, 29)
     # print(f"\n{'='*60}")
     # print(f"  Отчёт за {format_report_date(target)}")
     # print(f"{'='*60}\n")
@@ -122,14 +122,22 @@ def main():
         attendance_map = {}
 
 
-    if not attendance_map:
+# ----------------------------------------------Не забыть отправить Эржану---------------
+    has_data = any(
+    rec is not None and (rec.arrival is not None or rec.departure is not None)
+    for rec in attendance_map.values()
+)
+
+    if not attendance_map or not has_data:
         msg = (
         f"Отчет за {format_report_date(target)} не сформирован\n"
         f"Причина: таблица посещаемости не заполнена"
     )
         logger.warning(msg)
-        # send_message(msg)
+        send_message(msg)
         return
+# -----------------------------------------------------------------------------------------
+
 
     # Заголовок таблицы вывода
     col = "{:<35} {:>10} {:>10} {:>12} {:>12} {:>30}"
