@@ -4,36 +4,35 @@ from dataclasses import dataclass
 from enum import Enum
 import re
 
+
 from datetime import date, datetime, timedelta
 
 import logging
 from typing import Optional
-
 logger = logging.getLogger(__name__)
 
 
 class EventType(Enum):
-    OFFLINE = "offline"  # офлайн — проверяем приход/уход
-    ONLINE = "online"  # онлайн  — пропускаем
-    IGNORE = "ignore"  # не рабочее — пропускаем
-
+    OFFLINE = "offline"   # офлайн — проверяем приход/уход
+    ONLINE  = "online"    # онлайн  — пропускаем
+    IGNORE  = "ignore"    # не рабочее — пропускаем
 
 SUMMARY_RULES: list[tuple[str, EventType]] = [
     ("работа (оффлайн)", EventType.OFFLINE),
     ("работа 6 (оффлайн)", EventType.OFFLINE),
     ("работа (офлайн)", EventType.OFFLINE),
     ("работа оффлайн", EventType.OFFLINE),
-    ("работа (онлайн)", EventType.ONLINE),
-    ("работа онлайн", EventType.ONLINE),
+    ("работа (онлайн)",  EventType.ONLINE),
+    ("работа онлайн",  EventType.ONLINE),
 ]
 
 
 @dataclass
 class WorkEvent:
-    summary: str
+    summary:    str
     event_type: EventType
-    start: datetime  # naive, local time (Asia/Bishkek)
-    end: datetime  # naive, local time
+    start:      datetime   # naive, local time (Asia/Bishkek)
+    end:        datetime   # naive, local time
 
 
 BISHKEK_OFFSET = timedelta(hours=6)
@@ -57,7 +56,6 @@ def _parse_dt(value: str, tzid: Optional[str]) -> datetime:
 
     return dt
 
-
 def _normalize(text: str) -> str:
     text = text.lower()
 
@@ -72,7 +70,6 @@ def _normalize(text: str) -> str:
     text = text.replace("оффлайн", "офлайн")
 
     return text.strip()
-
 
 def _parse_vevent_blocks(text: str) -> list[dict[str, str]]:
     # Раскрываем line folding
@@ -114,7 +111,6 @@ def _classify(summary: str) -> EventType:
 
     return EventType.IGNORE
 
-
 def _parse_rrule(rrule_str: str) -> dict[str, str]:
     result = {}
     for part in rrule_str.split(";"):
@@ -138,28 +134,26 @@ def get_overridden_dates(blocks: list[dict], uid: str) -> set[date]:
                 pass
     return overridden
 
-
-def _occurs_on(event: dict[str, str], target: date, overridden_dates: set = None) -> Optional[
-    tuple[datetime, datetime]]:
+def _occurs_on(event: dict[str, str], target: date, overridden_dates: set = None) -> Optional[tuple[datetime, datetime]]:
     raw_start = event.get("_raw_DTSTART", "DTSTART")
     tzid = _get_tzid(raw_start)
 
     try:
         dt_start = _parse_dt(event["DTSTART"], tzid)
-        dt_end = _parse_dt(event["DTEND"], tzid)
+        dt_end   = _parse_dt(event["DTEND"],   tzid)
     except (KeyError, ValueError) as e:
         logger.warning(f"Не удалось распарсить время события: {e}")
         return None
 
-    duration = dt_end - dt_start
+    duration  = dt_end - dt_start
     rrule_str = event.get("RRULE")
 
     if rrule_str:
         rrule = _parse_rrule(rrule_str)
-        freq = rrule.get("FREQ", "")
+        freq  = rrule.get("FREQ", "")
 
         if freq == "WEEKLY":
-            byday_raw = rrule.get("BYDAY", "")
+            byday_raw  = rrule.get("BYDAY", "")
             byday_days = {d.strip() for d in byday_raw.split(",")}
             target_byday = {k for k, v in BYDAY_MAP.items() if v == target.weekday()}
 
@@ -174,6 +168,7 @@ def _occurs_on(event: dict[str, str], target: date, overridden_dates: set = None
             if occurrence_start.date() < dt_start.date():
                 return None
 
+            
             if overridden_dates and occurrence_start.date() in overridden_dates:
                 return None
 
@@ -207,7 +202,7 @@ def _occurs_on(event: dict[str, str], target: date, overridden_dates: set = None
         if dt_start.date() == target:
             return dt_start, dt_end
         return None
-
+    
 
 def _is_override_for_date(event: dict[str, str], target: date) -> Optional[tuple[datetime, datetime]]:
     if "RECURRENCE-ID" not in event:
@@ -219,7 +214,7 @@ def _is_override_for_date(event: dict[str, str], target: date) -> Optional[tuple
     try:
         recur_dt = _parse_dt(event["RECURRENCE-ID"], tzid)
         dt_start = _parse_dt(event["DTSTART"], tzid)
-        dt_end = _parse_dt(event["DTEND"], tzid)
+        dt_end   = _parse_dt(event["DTEND"], tzid)
     except (KeyError, ValueError):
         return None
 
