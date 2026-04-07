@@ -100,99 +100,80 @@ def build_telegram_report(target_date: date, violations_by_employee: dict) -> st
 
 
 def main():
-    violations_by_employee = {}
-
-    target: date = get_target_date()
-    # target = date(2026, 4, 3)
-    # print(f"\n{'='*60}")
-    # print(f"  Отчёт за {format_report_date(target)}")
-    # print(f"{'='*60}\n")
-
-    #  Загружаем список сотрудников
+    targets: list[date] = get_target_date()
+    # targets=[date(2026, 4, 6), date(2026, 4, 5)]
     employees = load_employees(EMPLOYEES_SHEET_ID)
     logger.info("Сотрудников в списке: %d", len(employees))
 
-    #  Загружаем все записи прихода/ухода за дату одним запросом
-    try:
-        attendance_map = load_attendance(TIME_SHEET_ID, target)
-    except Exception as exc:
-        logger.error("Не удалось загрузить таблицу посещаемости: %s", exc)
-        attendance_map = {}
+    for target in targets:
+        violations_by_employee = {}
 
-# проверка не пустая ли таблица вход\выход
-    
-    has_data = any(
-        rec is not None and (rec.arrival is not None or rec.departure is not None)
-        for rec in attendance_map.values()
-    )
-
-    if not attendance_map or not has_data:
-        msg = (
-            f"Отчет за {format_report_date(target)} не сформирован\n"
-            f"Причина: таблица посещаемости не заполнена"
-        )
-        logger.warning(msg)
-        send_message(msg)
-        return
-    
-
-    # Заголовок таблицы вывода
-    # col = "{:<35} {:>10} {:>10} {:>12} {:>12} {:>30}"
-    # header = col.format(
-    #     "ФИО",
-    #     "Пл.приход",
-    #     "Пл.уход",
-    #     "Факт.приход",
-    #     "Факт.уход",
-    #     "Нарушение"
-    # )
-    # print(header)
-    # print("-" * len(header))
-
-    #  Перебираем сотрудников
-    for emp in employees:
-        # Плановое время из ICS
         try:
-            events = get_work_events(emp.ics_url, target)
-            planned_arrival, planned_departure = _planned_times(events)
+            attendance_map = load_attendance(TIME_SHEET_ID, target)
         except Exception as exc:
-            logger.warning("Ошибка при загрузке календаря %s: %s", emp.full_name, exc)
-            planned_arrival = planned_departure = None
+            logger.error("Не удалось загрузить таблицу посещаемости: %s", exc)
+            attendance_map = {}
 
-        # Фактическое время из Sheets
-        rec = get_attendance_for_employee(attendance_map, emp.full_name)
-        actual_arrival = rec.arrival if rec else None
-        actual_departure = rec.departure if rec else None
+        has_data = any(
+            rec is not None and (rec.arrival is not None or rec.departure is not None)
+            for rec in attendance_map.values()
+        )
 
-        violations: list = []
-        if planned_arrival and planned_departure:
-            violations = check_violations(
-                employee=emp.full_name,
-                plan_start=planned_arrival,
-                plan_end=planned_departure,
-                fact_start=actual_arrival,
-                fact_end=actual_departure,
+        if not attendance_map or not has_data:
+            msg = (
+                f"Отчет за {format_report_date(target)} не сформирован\n"
+                f"Причина: таблица посещаемости не заполнена"
             )
-        else:
-            violations = []
-        violations_by_employee[emp.full_name] = violations
-        viol_str = _format_violations(violations)
+            logger.warning(msg)
+            send_message(msg)
+            continue  # переходим к следующей дате
 
-        # print(col.format(
-        #     emp.full_name[:34],
-        #     _fmt(planned_arrival),
-        #     _fmt(planned_departure),
-        #     _fmt(actual_arrival),
-        #     _fmt(actual_departure),
-        #     viol_str
-        # ))
-    message = build_telegram_report(target, violations_by_employee)
-    send_message(message)
+        # col = "{:<35} {:>10} {:>10} {:>12} {:>12} {:>30}"
+        # header = col.format("ФИО", "Пл.приход", "Пл.уход", "Факт.приход", "Факт.уход", "Нарушение")
+        # print(f"\n{'='*60}")
+        # print(f"  Отчёт за {format_report_date(target)}")
+        # print(f"{'='*60}")
+        # print(header)
+        # print("-" * len(header))
 
-    # сохранение в архив таблицу
-    all_violations = [v for vlist in violations_by_employee.values() for v in vlist]
-    save_violations(all_violations, target)
+        for emp in employees:
+            try:
+                events = get_work_events(emp.ics_url, target)
+                planned_arrival, planned_departure = _planned_times(events)
+            except Exception as exc:
+                logger.warning("Ошибка при загрузке календаря %s: %s", emp.full_name, exc)
+                planned_arrival = planned_departure = None
 
+            rec = get_attendance_for_employee(attendance_map, emp.full_name)
+            actual_arrival = rec.arrival if rec else None
+            actual_departure = rec.departure if rec else None
+
+            if planned_arrival and planned_departure:
+                violations = check_violations(
+                    employee=emp.full_name,
+                    plan_start=planned_arrival,
+                    plan_end=planned_departure,
+                    fact_start=actual_arrival,
+                    fact_end=actual_departure,
+                )
+            else:
+                violations = []
+
+            # violations_by_employee[emp.full_name] = violations
+            # print(col.format(
+            #     emp.full_name[:34],
+            #     _fmt(planned_arrival),
+            #     _fmt(planned_departure),
+            #     _fmt(actual_arrival),
+            #     _fmt(actual_departure),
+            #     _format_violations(violations)
+            # ))
+
+        message = build_telegram_report(target, violations_by_employee)
+        send_message(message)
+
+        all_violations = [v for vlist in violations_by_employee.values() for v in vlist]
+        save_violations(all_violations, target)
     print()
 
 

@@ -52,13 +52,17 @@ def get_work_events(source: str, target: date) -> list[WorkEvent]:
             continue
 
         start, end = override
-        results.append(WorkEvent(summary=summary, event_type=etype, start=start, end=end))
 
-        # Запоминаем UID: основная серия не должна генерировать вхождение на эту дату
+# Запоминаем UID в любом случае — серия не должна генерировать вхождение на эту дату
         uid = block.get("UID", "")
         if uid:
             overridden_uids_for_target.add(uid)
 
+# Событие перенесено на другой день — не показываем за target
+        if start.date() != target:
+            continue
+
+        results.append(WorkEvent(summary=summary, event_type=etype, start=start, end=end))
     # --- Шаг 2: Перенесённые override-блоки (новая дата == target) ---
     for summary, start, end in _get_relocated_overrides(blocks, target):
         etype = _classify(summary)
