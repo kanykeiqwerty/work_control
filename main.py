@@ -1,18 +1,19 @@
-import argparse
-from app.services.sheets_archieve_service import save_violations
-
-from apscheduler.schedulers.blocking import BlockingScheduler
+import asyncio
 import logging
 from datetime import date
 
+import uvicorn
+from fastapi import FastAPI
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from decouple import config
+
 from app.config.settings import EMPLOYEES_SHEET_ID, TIME_SHEET_ID
-from app.services.violation_service import check_violations
-from app.utils.data_utils import get_target_date, format_report_date
-from app.services.sheets_employees_service import load_employees
-from app.services.sheets_attend_service import load_attendance, get_attendance_for_employee
-from app.services.ics_parser import get_work_events
-from app.utils.ics_utils import EventType
+from app.api.router import router as report_router
+from app.bot.handlers import create_bot_app
+from app.services.sheets_archieve_service import save_violations
 from app.services.telegram_service import send_message
+from app.utils.data_utils import get_target_date, format_report_date
+from app.utils.report_builder import build_report_data, build_telegram_text
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,194 +21,90 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# FastAPI
 
-def _planned_times(events):
-    """
-    Возвращает (planned_arrival, planned_departure) из списка WorkEvent,
-    рассматривая только OFFLINE-блоки.
-    Если офлайн-блоков нет — возвращает (None, None).
-    """
-    offline = [e for e in events if e.event_type == EventType.OFFLINE]
-    if not offline:
-        return None, None
-    return offline[0].start.time(), offline[-1].end.time()
+fastapi_app = FastAPI(title="WorkTimeControl API")
+fastapi_app.include_router(report_router)
 
 
-def _format_violations(violations) -> str:
-    if not violations:
-        return "OK"
+# Scheduled job 
 
-    parts = []
-
-    for v in violations:
-        if v.type.value == "ABSENT":
-            return "Не зафиксирован приход"
-
-        if v.type.value == "NO_DEPARTURE":
-            return "Нет отметки об уходе"
-
-        if v.type.value == "LATE":
-            if v.fact_time and v.plan_time:
-                parts.append(
-                    f"Опоздание {v.delta_minutes} мин (план {v.plan_time.strftime('%H:%M')}, факт {v.fact_time.strftime('%H:%M')} ) "
-
-                )
-            else:
-                parts.append(f"Опоздание {v.delta_minutes} мин")
-
-        if v.type.value == "EARLY_LEAVE":
-            if v.fact_time and v.plan_time:
-                parts.append(
-                    f"Ранний уход {v.delta_minutes} мин (план {v.plan_time.strftime('%H:%M')}, факт {v.fact_time.strftime('%H:%M')})"
-
-                )
-            else:
-                parts.append(f"Ранний уход {v.delta_minutes} мин")
-
-    return ", ".join(parts)
-
-
-def _fmt(t) -> str:
-    """Форматирует time или None в строку."""
-    return t.strftime("%H:%M") if t else "нб"
-
-
-def build_telegram_report(target_date: date, violations_by_employee: dict) -> str:
-    lines = []
-
-    lines.append(f"📅 Отчет за: {format_report_date(target_date)}")
-    lines.append("")
-
-    total_employees = len(violations_by_employee)
-    without_violations = 0
-
-    for employee, violations in violations_by_employee.items():
-        if not violations:
-            without_violations += 1
-            continue
-
-        viol_text = _format_violations(violations)
-        lines.append(f"👤 {employee}\n{viol_text}")
-        lines.append("")
-
-    if without_violations == total_employees:
-        lines.append(f"✅ Нарушений нет")
-        lines.append(f"✅ Нарушений не выявлено. Все офлайн-сотрудники ({total_employees} чел.) в норме")
-    else:
-        lines.append(f" 👥 Без нарушений: {without_violations} человек")
-
-    return "\n".join(lines)
-
-
-def main():
+def scheduled_report() -> None:
+    """Запускается планировщиком: формирует и отправляет отчёты в Telegram."""
     targets: list[date] = get_target_date()
-    # targets=[date(2026, 4, 6), date(2026, 4, 5)]
-    employees = load_employees(EMPLOYEES_SHEET_ID)
-    logger.info("Сотрудников в списке: %d", len(employees))
 
     for target in targets:
-        violations_by_employee = {}
+        report_data = build_report_data(target)
 
-        try:
-            attendance_map = load_attendance(TIME_SHEET_ID, target)
-        except Exception as exc:
-            logger.error("Не удалось загрузить таблицу посещаемости: %s", exc)
-            attendance_map = {}
-
-        has_data = any(
-            rec is not None and (rec.arrival is not None or rec.departure is not None)
-            for rec in attendance_map.values()
-        )
-
-        if not attendance_map or not has_data:
+        if report_data is None:
             msg = (
                 f"Отчет за {format_report_date(target)} не сформирован\n"
                 f"Причина: таблица посещаемости не заполнена"
             )
             logger.warning(msg)
             send_message(msg)
-            continue  # переходим к следующей дате
+            continue
 
-        # col = "{:<35} {:>10} {:>10} {:>12} {:>12} {:>30}"
-        # header = col.format("ФИО", "Пл.приход", "Пл.уход", "Факт.приход", "Факт.уход", "Нарушение")
-        # print(f"\n{'='*60}")
-        # print(f"  Отчёт за {format_report_date(target)}")
-        # print(f"{'='*60}")
-        # print(header)
-        # print("-" * len(header))
+        text = build_telegram_text(report_data)
+        send_message(text)
 
-        for emp in employees:
-            try:
-                events = get_work_events(emp.ics_url, target)
-                planned_arrival, planned_departure = _planned_times(events)
-            except Exception as exc:
-                logger.warning("Ошибка при загрузке календаря %s: %s", emp.full_name, exc)
-                planned_arrival = planned_departure = None
-
-            rec = get_attendance_for_employee(attendance_map, emp.full_name)
-            actual_arrival = rec.arrival if rec else None
-            actual_departure = rec.departure if rec else None
-
-            if planned_arrival and planned_departure:
-                violations = check_violations(
-                    employee=emp.full_name,
-                    plan_start=planned_arrival,
-                    plan_end=planned_departure,
-                    fact_start=actual_arrival,
-                    fact_end=actual_departure,
-                )
-            else:
-                violations = []
-
-            # violations_by_employee[emp.full_name] = violations
-            # print(col.format(
-            #     emp.full_name[:34],
-            #     _fmt(planned_arrival),
-            #     _fmt(planned_departure),
-            #     _fmt(actual_arrival),
-            #     _fmt(actual_departure),
-            #     _format_violations(violations)
-            # ))
-
-        message = build_telegram_report(target, violations_by_employee)
-        send_message(message)
-
-        all_violations = [v for vlist in violations_by_employee.values() for v in vlist]
+        all_violations = [
+            v
+            for emp in report_data["employees"]
+            for v in emp["violations_raw"]
+        ]
         save_violations(all_violations, target)
-    print()
+        
+        logger.info("Отчёт за %s отправлен.", target)
 
 
-def run_scheduler():
-    scheduler = BlockingScheduler(timezone="Asia/Bishkek")
+
+
+
+
+async def main() -> None:
+    BOT_TOKEN = config("BOT_TOKEN")
+    # report = build_telegram_text(build_report_data(date(2026, 4, 8)))
+    # send_message(report)
+    # scheduled_report()
+
+    # 1. Telegram bot (polling)
+    bot_app = create_bot_app(BOT_TOKEN)
+    await bot_app.initialize()
+    await bot_app.start()
+    await bot_app.updater.start_polling(drop_pending_updates=True)
+    logger.info("Telegram polling запущен.")
+
+    # 2. APScheduler (async)
+    scheduler = AsyncIOScheduler(timezone="Asia/Bishkek")
     scheduler.add_job(
-        main,
+        scheduled_report,
         trigger="cron",
         day_of_week="mon-fri",
         hour=13,
         minute=0,
     )
-
-    logger.info(
-        "Планировщик запущен. Задача: пн–пт в 13:00 (Asia/Bishkek). "
-
-    )
-
     scheduler.start()
+    logger.info("Планировщик запущен — пн–пт в 13:00 (Asia/Bishkek).")
 
+    # 3. FastAPI (uvicorn)
+    server_config = uvicorn.Config(
+        fastapi_app,
+        host="0.0.0.0",
+        port=8000,
+        log_level="info",
+    )
+    server = uvicorn.Server(server_config)
+    logger.info("FastAPI запущен на http://0.0.0.0:8000")
 
-# if __name__ == "__main__":
-#     main()
+    try:
+        await server.serve()
+    finally:
+        scheduler.shutdown()
+        await bot_app.updater.stop()
+        await bot_app.stop()
+        await bot_app.shutdown()
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="WorkTimeControl")
-    parser.add_argument(
-        "--now",
-        action="store_true",
-        help="Запустить задачу немедленно (тест) и выйти",
-    )
-    args = parser.parse_args()
-
-    if args.now:
-        main()
-    else:
-        run_scheduler()
+    asyncio.run(main())

@@ -78,8 +78,8 @@ def format_report_date(date):
 
 
 # пример использования
-targets = get_target_date()
+# targets = get_target_date()
 
-for d in targets:
-    print(format_report_date(d))
-    print(format_sheet_date(d))
+# for d in targets:
+#     print(format_report_date(d))
+#     print(format_sheet_date(d))
