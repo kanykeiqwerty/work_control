@@ -32,6 +32,7 @@ fastapi_app.include_router(report_router)
 def scheduled_report() -> None:
     """Запускается планировщиком: формирует и отправляет отчёты в Telegram."""
     targets: list[date] = get_target_date()
+    # targets=[date(2026, 4, 8)]
 
     for target in targets:
         report_data = build_report_data(target)
